@@ -1,0 +1,18 @@
+{
+  "schemaVersion": 1,
+  "id": "btaspleef",
+  "version": "${version}",
+  "name": "BTA Spleef",
+  "description": "Server-side Spleef arenas for Better than Adventure 8.0.1",
+  "authors": ["Verse"],
+  "license": "Apache-2.0",
+  "environment": "*",
+  "entrypoints": { "main": ["com.verse.spleef.BtaSpleef"] },
+  "mixins": ["btaspleef.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.18.4-bta.11",
+    "halplibe": ">=6.1.4",
+    "minecraft": "8.0.1",
+    "java": ">=17"
+  }
+}
