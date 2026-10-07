@@ -17,15 +17,9 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 public abstract class BlockBreakMixin {
 	@Shadow private Player player;
 
-	@Shadow public abstract boolean mineBlock(int x, int y, int z, Side side);
-
-	@Inject(method = "startMining", at = @At("HEAD"), cancellable = true)
-	private void btaspleef$instantSpleefSnow(int x, int y, int z, Side side, CallbackInfo ci) {
+	@Inject(method = "startMining", at = @At("HEAD"))
+	private void btaspleef$onBlockHit(int x, int y, int z, Side side, CallbackInfo ci) {
 		SpleefManager.onBlockHit(player, new net.minecraft.core.world.pos.TilePos(x, y, z));
-		if (SpleefManager.isInstamineBlock(player, x, y, z)) {
-			mineBlock(x, y, z, side);
-			ci.cancel();
-		}
 	}
 
 	@Inject(method = "mineBlock", at = @At("HEAD"), cancellable = true)
@@ -38,8 +32,13 @@ public abstract class BlockBreakMixin {
 		if (SpleefManager.preventArenaBlockBreak(player, x, y, z)) cir.setReturnValue(false);
 	}
 
-	@Inject(method = "placeItemStackOnTile", at = @At("HEAD"), cancellable = true)
+	@Inject(method = "useOrPlaceItemStackOnTile", at = @At("HEAD"), cancellable = true)
 	private void btaspleef$blockPlacementDuringRound(Player placer, World world, ItemStack stack, int x, int y, int z, Side side, double hitX, double hitY, CallbackInfoReturnable<Boolean> cir) {
+		if (SpleefManager.isActiveRoundParticipant(placer)) cir.setReturnValue(false);
+	}
+
+	@Inject(method = "placeItemStackOnTile", at = @At("HEAD"), cancellable = true)
+	private void btaspleef$blockPlacementDuringRoundCarried(Player placer, World world, ItemStack stack, int x, int y, int z, Side side, double hitX, double hitY, CallbackInfoReturnable<Boolean> cir) {
 		if (SpleefManager.isActiveRoundParticipant(placer)) cir.setReturnValue(false);
 	}
 }

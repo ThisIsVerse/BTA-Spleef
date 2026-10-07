@@ -18,7 +18,10 @@ public final class SpleefCommands implements CommandManager.CommandRegistry {
 		ArgumentBuilderLiteral<CommandSource> root = ArgumentBuilderLiteral.<CommandSource>literal("spleef")
 			.executes(ctx -> { if (!requireOp(ctx.getSource())) return 0; help(ctx.getSource()); return 1; });
 		root.then(ArgumentBuilderLiteral.<CommandSource>literal("join").executes(ctx -> join(ctx.getSource())));
-		root.then(admin("start").executes(ctx -> start(ctx.getSource(), null)).then(arenaArg("arena", SpleefCommands::start)));
+		root.then(ArgumentBuilderLiteral.<CommandSource>literal("leave").executes(ctx -> leave(ctx.getSource())));
+		ArgumentBuilderRequired<CommandSource, String> startArena = ArgumentBuilderRequired.<CommandSource, String>argument("arena", ArgumentTypeString.word())
+			.executes(ctx -> start(ctx.getSource(), getString(ctx, "arena")));
+		root.then(ArgumentBuilderLiteral.<CommandSource>literal("start").executes(ctx -> start(ctx.getSource(), null)).then(startArena));
 
 		ArgumentBuilderRequired<CommandSource, String> create = ArgumentBuilderRequired.<CommandSource, String>argument("name", ArgumentTypeString.word());
 		ArgumentBuilderRequired<CommandSource, Integer> minX = integer("minX");
@@ -67,6 +70,7 @@ public final class SpleefCommands implements CommandManager.CommandRegistry {
 
 	private static boolean requireOp(CommandSource source) { Player p=source.getSender(); if(p==null){source.sendMessage("Run this command in game as an OP.");return false;} if(!SpleefManager.isOpPublic(p)){p.sendMessage("Only server operators can view or use Spleef admin commands.");return false;} return true; }
 	private static int join(CommandSource source) { Player p=source.getSender(); if(p==null){source.sendMessage("Join Spleef in game.");return 0;} String message=SpleefManager.join(p);p.sendMessage(message);return message.startsWith("Joined Spleef")?1:0; }
+	private static int leave(CommandSource source) { Player p=source.getSender(); if(p==null){source.sendMessage("Leave Spleef in game.");return 0;} String message=SpleefManager.leave(p);p.sendMessage(message);return message.startsWith("You left")?1:0; }
 
 	private static int create(CommandSource source, String name, int minX,int minY,int minZ,int maxX,int maxY,int maxZ,int lobbyX,int lobbyY,int lobbyZ,int spawnY) {
 		Player player = requireOpPlayer(source); if (player == null) return 0;
@@ -90,9 +94,9 @@ public final class SpleefCommands implements CommandManager.CommandRegistry {
 		catch(Exception e){player.sendMessage("Could not add lobby region: "+e.getMessage());return 0;}
 	}
 	private static int stopEditing(CommandSource source){Player player=requireOpPlayer(source);if(player==null)return 0;SpleefManager.clearEditing(player);player.sendMessage("Stopped editing Spleef spawns.");return 1;}
-	private static int start(CommandSource source,String arena){Player player=requireOpPlayer(source);if(player==null)return 0;boolean started=SpleefManager.start(player,arena);if(started)player.sendMessage("Spleef countdown started.");return started?1:0;}
+	private static int start(CommandSource source,String arena){Player player=source.getSender();if(player==null){source.sendMessage("Run this command in game.");return 0;}boolean started=SpleefManager.start(player,arena);if(started)player.sendMessage("Spleef countdown started.");return started?1:0;}
 	private static int list(CommandSource source){Player player=requireOpPlayer(source);if(player==null)return 0;source.sendMessage("Saved Spleef arenas:");for(Arena arena:SpleefManager.arenas())source.sendMessage("- "+arena.name+" ("+arena.spawns.size()+" spawns)");return 1;}
 	private static int delete(CommandSource source,String name){Player player=requireOpPlayer(source);if(player==null)return 0;if(SpleefManager.arena(name)==null){player.sendMessage("Unknown arena.");return 0;}if(!SpleefManager.removeArena(name)){player.sendMessage("Stop the active round before deleting this arena.");return 0;}player.sendMessage("Deleted arena '"+name+"'.");return 1;}
 	private static Player requireOpPlayer(CommandSource source){Player player=source.getSender();if(player==null){source.sendMessage("Run this command in game as an OP.");return null;}if(!SpleefManager.isOpPublic(player)){player.sendMessage("Only server operators can use Spleef setup commands.");return null;}return player;}
-	private static void help(CommandSource source){source.sendMessage("Players: /spleef join.");source.sendMessage("OPs: /spleef start [arena], /spleef create <name> <minX> <minY> <minZ> <maxX> <maxY> <maxZ> <lobbyX> <lobbyY> <lobbyZ> <spawnY>.");source.sendMessage("Setup: /spleef addlobbyregion <name> <minX> <minY> <minZ> <maxX> <maxY> <maxZ>, /spleef addspawn <name>, /spleef setlobby <name>.");source.sendMessage("Other OP commands: /spleef editspawns, stopediting, list, delete.");}
+	private static void help(CommandSource source){source.sendMessage("Players: /spleef join, /spleef leave, /spleef start [arena] (first player in queue or an op).");source.sendMessage("OPs: /spleef create <name> <minX> <minY> <minZ> <maxX> <maxY> <maxZ> <lobbyX> <lobbyY> <lobbyZ> <spawnY>.");source.sendMessage("Setup: /spleef addlobbyregion <name> <minX> <minY> <minZ> <maxX> <maxY> <maxZ>, /spleef addspawn <name>, /spleef setlobby <name>.");source.sendMessage("Other OP commands: /spleef editspawns, stopediting, list, delete.");}
 }

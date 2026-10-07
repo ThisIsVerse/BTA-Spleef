@@ -15,5 +15,6 @@ public abstract class PlayerDamageMixin {
 	private void btaspleef$disableRoundPvp(Entity attacker, int damage, DamageType type, CallbackInfoReturnable<Boolean> cir) {
 		Player victim = (Player)(Object)this;
 		if (attacker instanceof Player && SpleefManager.sameActiveRound(victim, (Player)attacker)) cir.setReturnValue(false);
+		else if (type == DamageType.FALL && SpleefManager.isRoundParticipant(victim)) cir.setReturnValue(false);
 	}
 }

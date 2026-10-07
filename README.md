@@ -1,44 +1,45 @@
 # BTA Spleef
 
-Spleef minigame for Better than Adventure 8.0.1 that requires no modifications on the client side at all except installation of the mod on the server. Just use a normal BTA 8.0.1 client to connect.
+A spleef minigame for Better than Adventure 8.0.1 that only needs to be installed on the server. Players just connect with a normal BTA 8.0.1 client. No custom blocks/items/packets, nothing on the client at all.
 
 ## Building
 
-Requires Java 17, Gradle 9.3.1. Simply run `gradlew.bat build` and grab the resulting jar from `build/libs/`.
+Java 17, Gradle 9.3.1. Just run `gradlew.bat build` and grab the jar from `build/libs/`.
 
-## Arena creation
+## Setting up an arena
 
-First build both arena and lobby within the same dimension. Once you save the arena, the mod snapshots the cuboid (block id and data) which enables resetting of the arena after each match. This is limited to 100,000 blocks so do not abuse. `spawnY` is the height of the floor. Any air block on that level is converted to the snow block upon the round starting and existing layers are preserved. Be sure to keep water/lava pits within the saved region.
+Build your arena and lobby in the same dimension first. When you save it, the mod snapshots every block in the cuboid (id and data) so it can reset the arena after each round. That's capped at 100,000 blocks so don't go overboard. `spawnY` just marks one layer that gets auto filled with snow on any air block when a round starts (existing blocks on that layer are left alone), it's a convenience for building a quick flat floor, it's not a restriction on where the arena actually is. Once a round is running, every block inside the saved cuboid is breakable by the players in it, at any height, so arenas can have multiple floors, pits, whatever shape you want. Keep your water/lava pits inside the saved area or they won't reset.
 
 ```text
 /spleef create <name> <minX> <minY> <minZ> <maxX> <maxY> <maxZ> <lobbyX> <lobbyY> <lobbyZ> <spawnY>
 /spleef editspawns <name>
 ```
 
-For example, setup with the lobby spawn at (101, 144, 157)
+Example setup, lobby spawn at (101, 144, 157):
 
 ```text
 /spleef create arena1 66 127 144 91 151 169 101 144 157 147
 /spleef addlobbyregion arena1 98 142 153 103 148 161
 ```
 
-Now, stand on (101, 144, 157) and execute `/spleef setlobby arena1`. 
+Stand at (101, 144, 157) and run `/spleef setlobby arena1`.
 
-Afterwards, stand on each of the spawn tiles and execute `/spleef addspawn arena1` (I used (78, 148, 164) and (78, 148, 149) for my test arena). Arenas are stored in `config/bta-spleef-arenas.nbt`.
+Then for each spawn you want, stand wherever you want the player to start (any height above the floor works, it doesn't have to be right on top of it) and run `/spleef addspawn arena1`. Spawns get saved at whatever height you were standing at, so you can put them up above the arena and let players drop in when the round starts, the lock that holds people in place during the countdown only holds position, not gravity, so the moment the round goes live they fall. Arenas get saved to `config/bta-spleef-arenas.nbt`.
 
-## Round flow
+## How a round works
 
-Using `/spleef join` command, the player joins the arena with the highest amount of already waiting players or picks a random empty arena if nobody has already joined. You are instantly teleported to the spawn point and remain there (cannot wander around) until the actual round starts.
+`/spleef join` puts you in whatever arena has the most people already waiting, or picks a random empty one if nobody's waiting anywhere. You get teleported straight to your spawn and you're stuck there (can't wander off) until the round actually starts. `/spleef leave` pulls you back out of the queue if you change your mind.
 
-Once there are at least two people waiting, someone with op permissions should start the match using `/spleef start` command, optionally specifying arena name, and initiates a 5 second countdown. During the countdown, nobody can move or break blocks in the arena. The round starts by giving all players a shovel, placing blocks is disabled during the round, and breaking the snow block does not yield snowball drops.
+Once there's at least 2 people in, either the first player who joined or an op can run `/spleef start`, optionally with an arena name. That kicks off a 5 second countdown, nobody can move or break anything in the arena until it ends. Once it starts, any item (even your fist) instamines any block anywhere in the arena for participants, not just one floor layer, so multi layer arenas and pits work fine, no tool needed. Blocks can't be placed while a round is going, broken blocks don't drop anything, fall damage is off, and mobs won't spawn inside the arena.
 
-Only ops can break blocks in the arena at any time other than the active round. Falling in water/lava or falling below the bottom of the arena causes immediate elimination and switching the player to the spectator mode in the lobby. Disconnection is also considered as such, leaving the arena during the round results in elimination. Leaving the arena while waiting for a round starts removes the player from the queue. Last remaining player wins the round, the arena is reset afterwards, 15 minutes hardcap for the match.
+Only ops can break blocks in the arena any time it isn't running a round, and explosions can't touch arena blocks at all. Fall in water/lava or drop off the bottom and you're out, back to spectator in the lobby, and a lightning bolt strikes right where you lost with a butterfly left behind. The bolt is just the sound and the flash, it doesn't start fires or hurt anyone, so it's purely for show. Disconnecting counts the same way, leave while a round's running and you're eliminated, same as running `/spleef leave` mid round. Leaving while you're just waiting for a round to start simply pulls you out of the queue. Last one standing wins, round resets after a few seconds, 15 minute hard cap so nothing gets stuck forever.
 
 Other commands: `/spleef list`, `/spleef delete <name>`.
 
 ## Known limitations
 
-- lobby has to be within the same dimension as the arena, there's no cross dimension lobby support
-- each arena is one saved region with 100k block cap
+- the lobby has to be in the same dimension as the arena, there's no support for cross dimension lobbies
+- each arena is one saved region with a 100k block cap
+- since this is server only and real players connect with an unmodified client, the client still shows its own mining animation speed for whatever block and tool you're using, even though the server breaks it instantly underneath. for anything other than a fast/correct tool it can look like a short delay client side before the block actually visually disappears, there's no way around that without a client mod
 
 Apache 2.0, see LICENSE.

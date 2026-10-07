@@ -3,8 +3,9 @@ package com.verse.spleef;
 import com.mojang.nbt.tags.CompoundTag;
 import com.mojang.nbt.tags.ListTag;
 import com.mojang.nbt.NbtIo;
+import net.minecraft.core.entity.EntityLightning;
+import net.minecraft.core.entity.animal.MobButterfly;
 import net.minecraft.core.entity.player.Player;
-import net.minecraft.core.item.ItemStack;
 import net.minecraft.core.player.gamemode.Gamemodes;
 import net.minecraft.core.world.World;
 import net.minecraft.server.MinecraftServer;
@@ -22,7 +23,7 @@ public final class SpleefManager {
 	private static final int COUNTDOWN_TICKS = 5 * 20;
 	private static final int RESET_DELAY_TICKS = 3 * 20;
 	private static final int ROUND_MAX_TICKS = 20 * 60 * 15;
-	private static final Map<UUID, DisplacedItem> DISPLACED_ITEMS = new HashMap<>();
+	private static final Set<EntityLightning> COSMETIC_LIGHTNING = Collections.newSetFromMap(new WeakHashMap<>());
 
 	private SpleefManager() {}
 
@@ -151,10 +152,10 @@ public final class SpleefManager {
 		Arena arena = ARENAS.get(arenaName.toLowerCase(Locale.ROOT));
 		if (arena == null) throw new IllegalArgumentException("Unknown arena.");
 		if (!arena.dimensionEquals(player)) throw new IllegalArgumentException("Go to the arena dimension first.");
-		int x = (int)Math.floor(player.x), z = (int)Math.floor(player.z);
-		if (!arena.containsSaved(x, arena.spawnY, z)) throw new IllegalArgumentException("Stand above the arena floor before setting a spawn.");
+		int x = (int)Math.floor(player.x), y = (int)Math.floor(player.y), z = (int)Math.floor(player.z);
+		if (!arena.containsSaved(x, y, z)) throw new IllegalArgumentException("Stand inside the saved arena area before setting a spawn.");
 		if (arena.spawns.stream().anyMatch(s -> s.x == x && s.z == z)) throw new IllegalArgumentException("That column already has a spawn point.");
-		addSpawn(arena, x, arena.spawnY + 1, z);
+		addSpawn(arena, x, y, z);
 	}
 
 	public static boolean onBlockHit(Player player, net.minecraft.core.world.pos.TilePosc pos) {
@@ -187,6 +188,7 @@ public final class SpleefManager {
 		if (round.state == State.RUNNING) {
 			if (round.failed.add(player.uuid)) {
 				MinecraftServer server = MinecraftServer.getInstance();
+				strikeLossEffect(player);
 				announce(server, round, player.username + " disconnected and is out.");
 				checkWinner(server, round);
 			}
@@ -206,29 +208,17 @@ public final class SpleefManager {
 
 	public static boolean isInstamineBlock(Player player, int x, int y, int z) {
 		if (!isActiveRoundParticipant(player)) return false;
-		return player.world.getBlockId(x, y, z) == net.minecraft.core.block.Blocks.LAYER_SNOW.id();
+		String arenaName = findRoundFor(player.uuid);
+		Arena arena = ARENAS.get(arenaName);
+		return arena != null && arena.containsSaved(x, y, z);
 	}
 
-	private static void giveRoundShovel(Player player) {
-		if (player == null || player.inventory == null) return;
-		int slot = -1;
-		for (int i=0;i<player.inventory.mainInventory.length;i++) {
-			ItemStack stack=player.inventory.mainInventory[i];
-			if (stack != null && stack.getItem() == net.minecraft.core.item.Items.TOOL_SHOVEL_DIAMOND) { slot=i; break; }
-			if (slot < 0 && stack == null) slot=i;
+	public static boolean isInsideAnyArena(World world, int x, int y, int z) {
+		if (world == null) return false;
+		for (Arena arena : ARENAS.values()) {
+			if (arena.dimension == world.dimension.id && arena.containsSaved(x, y, z)) return true;
 		}
-		if (slot < 0) {
-			slot = player.inventory.getCurrentSlot();
-			DISPLACED_ITEMS.put(player.uuid, new DisplacedItem(slot, player.inventory.mainInventory[slot]));
-			player.sendMessage("Your held item will be returned after the Spleef round.");
-		}
-		if (player.inventory.mainInventory[slot] == null || player.inventory.mainInventory[slot].getItem() != net.minecraft.core.item.Items.TOOL_SHOVEL_DIAMOND) player.inventory.setItem(slot, new ItemStack(net.minecraft.core.item.Items.TOOL_SHOVEL_DIAMOND, 1, 0));
-		player.setCurrentItem(slot);
-	}
-
-	private static void restoreDisplacedItem(Player player) {
-		DisplacedItem displaced = DISPLACED_ITEMS.remove(player.uuid);
-		if (displaced != null && displaced.slot >= 0 && displaced.slot < player.inventory.mainInventory.length) player.inventory.setItem(displaced.slot, displaced.stack);
+		return false;
 	}
 
 	public static boolean preventArenaBlockBreak(Player player, int x, int y, int z) {
@@ -237,8 +227,8 @@ public final class SpleefManager {
 			if (!arena.dimensionEquals(player) || !arena.containsSaved(x,y,z)) continue;
 			Round round = ROUNDS.get(arena.name.toLowerCase(Locale.ROOT));
 			if (round != null && (round.state == State.WAITING || round.state == State.COUNTDOWN)) return true;
-			if (round != null && round.state == State.RUNNING) return !round.participants.contains(player.uuid) || y != arena.spawnY || player.world.getBlockId(x,y,z) != net.minecraft.core.block.Blocks.LAYER_SNOW.id();
-			if (!isOp(player)) return true;
+			if (round != null && round.state == State.RUNNING) return !round.participants.contains(player.uuid);
+			return !isOp(player);
 		}
 		return false;
 	}
@@ -282,7 +272,6 @@ public final class SpleefManager {
 			PlayerServer player = server.playerList.getPlayerEntity(round.names.get(id));
 			if (player == null) { round.failed.add(id); continue; }
 			player.setGamemode(Gamemodes.SURVIVAL);
-			giveRoundShovel(player);
 			Arena.Spawn spawn = spawnFor(round, id, arena);
 			if (spawn != null) teleportPlayer(player, world, arena.dimension, spawn.x + .5, spawn.y, spawn.z + .5);
 		}
@@ -292,11 +281,29 @@ public final class SpleefManager {
 
 	private static void fail(Player player, Arena arena, Round round) {
 		if (!round.failed.add(player.uuid)) return;
+		strikeLossEffect(player);
 		player.setGamemode(Gamemodes.SPECTATOR);
 		WorldServer lobbyWorld = MinecraftServer.getInstance().getDimensionWorld(arena.lobbyDimension);
 		if (lobbyWorld != null) teleportPlayer((PlayerServer)player, lobbyWorld, arena.lobbyDimension, arena.lobbyX + .5, arena.lobbyY, arena.lobbyZ + .5);
 		player.sendMessage("You are out! You are now spectating.");
 	}
+
+	private static void strikeLossEffect(Player player) {
+		if (player == null || !(player.world instanceof WorldServer)) return;
+		strikeCosmeticLightning((WorldServer) player.world, player.x, player.y, player.z);
+	}
+
+	private static void strikeCosmeticLightning(WorldServer world, double x, double y, double z) {
+		EntityLightning bolt = new EntityLightning(world, x, y, z);
+		COSMETIC_LIGHTNING.add(bolt);
+		world.entityJoinedWorld(bolt);
+		MobButterfly butterfly = new MobButterfly(world);
+		butterfly.moveTo(x, y, z, 0f, 0f);
+		butterfly.spawnInit();
+		world.entityJoinedWorld(butterfly);
+	}
+
+	public static boolean isCosmeticLightning(EntityLightning bolt) { return COSMETIC_LIGHTNING.contains(bolt); }
 
 	private static void teleportPlayer(PlayerServer player, WorldServer world, int dimension, double x, double y, double z) {
 		if (player.dimension != dimension || player.world != world) {
@@ -326,7 +333,6 @@ public final class SpleefManager {
 			PlayerServer player = server.playerList.getPlayerEntity(round.names.get(id));
 			if (player == null) continue;
 			player.setGamemode(Gamemodes.SURVIVAL);
-			restoreDisplacedItem(player);
 			WorldServer lobbyWorld = server.getDimensionWorld(arena.lobbyDimension);
 			if (lobbyWorld != null) teleportPlayer(player, lobbyWorld, arena.lobbyDimension, arena.lobbyX + .5, arena.lobbyY, arena.lobbyZ + .5);
 		}
@@ -348,13 +354,43 @@ public final class SpleefManager {
 		}
 	}
 
+	public static String leave(Player player) {
+		if (player == null) return "Leave Spleef from a server player.";
+		String arenaName = findRoundFor(player.uuid);
+		if (arenaName == null) return "You are not waiting for or playing in a Spleef round.";
+		Round round = ROUNDS.get(arenaName);
+		if (round == null) return "You are not waiting for or playing in a Spleef round.";
+		Arena arena = ARENAS.get(arenaName);
+		if (round.state == State.WAITING) {
+			round.participants.remove(player.uuid);
+			round.names.remove(player.uuid);
+			return "You left the Spleef queue.";
+		}
+		if (round.state == State.COUNTDOWN || round.state == State.RUNNING) {
+			if (round.failed.add(player.uuid)) {
+				MinecraftServer server = MinecraftServer.getInstance();
+				strikeLossEffect(player);
+				player.setGamemode(Gamemodes.SURVIVAL);
+				if (arena != null) {
+					WorldServer lobbyWorld = server.getDimensionWorld(arena.lobbyDimension);
+					if (lobbyWorld != null) teleportPlayer((PlayerServer)player, lobbyWorld, arena.lobbyDimension, arena.lobbyX + .5, arena.lobbyY, arena.lobbyZ + .5);
+				}
+				announce(server, round, player.username + " left the round.");
+				if (round.state == State.RUNNING) checkWinner(server, round);
+			}
+			return "You left the Spleef round.";
+		}
+		return "You are not waiting for or playing in a Spleef round.";
+	}
+
 	public static boolean start(Player starter, String name) {
 		MinecraftServer server = MinecraftServer.getInstance();
-		if (starter == null || !isOp(starter)) return false;
+		if (starter == null) return false;
+		boolean op = isOp(starter);
 		if (name == null) {
 			String joined = findRoundFor(starter.uuid);
 			if (joined != null) name = joined;
-			else {
+			else if (op) {
 				name = ROUNDS.values().stream().filter(r -> r.state == State.WAITING)
 					.sorted((a,b) -> { int count = Integer.compare(b.participants.size(), a.participants.size()); return count != 0 ? count : a.arena.compareTo(b.arena); })
 					.map(r -> r.arena).findFirst().orElse(null);
@@ -365,6 +401,8 @@ public final class SpleefManager {
 		if (arena == null) { starter.sendMessage("Unknown Spleef arena."); return false; }
 		Round round = ROUNDS.get(name.toLowerCase(Locale.ROOT));
 		if (round == null || round.state != State.WAITING) { starter.sendMessage("That arena has no waiting players."); return false; }
+		boolean firstInQueue = !round.participants.isEmpty() && round.participants.iterator().next().equals(starter.uuid);
+		if (!op && !firstInQueue) { starter.sendMessage("Only the first player in the queue or a server operator can start this round."); return false; }
 		if (arena.spawns.isEmpty()) { starter.sendMessage("This arena has no player spawns. Ask an admin to add them."); return false; }
 		WorldServer world = server.getDimensionWorld(arena.dimension);
 		if (world == null) { starter.sendMessage("Arena dimension is not loaded."); return false; }
@@ -420,7 +458,6 @@ public final class SpleefManager {
 	public static boolean removeArena(String name) { if (ROUNDS.containsKey(name.toLowerCase(Locale.ROOT))) return false; ARENAS.remove(name.toLowerCase(Locale.ROOT)); EDITING.values().removeIf(value -> value.equals(name.toLowerCase(Locale.ROOT))); save(); return true; }
 
 	private enum State { WAITING, COUNTDOWN, RUNNING, FINISHING }
-	private static final class DisplacedItem { final int slot; final ItemStack stack; DisplacedItem(int slot, ItemStack stack) { this.slot=slot; this.stack=stack; } }
 	private static final class Round {
 		final String arena; final Set<UUID> participants = new LinkedHashSet<>(); final Map<UUID,String> names = new HashMap<>(); final Set<UUID> failed = new HashSet<>(); State state; int ticks;
 		Round(String arena) { this.arena = arena; }

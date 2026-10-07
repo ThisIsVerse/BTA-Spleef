@@ -3,7 +3,7 @@
   "package": "com.verse.spleef.mixin",
   "compatibilityLevel": "JAVA_17",
   "injectors": { "defaultRequire": 1 },
-  "mixins": ["MinecraftServerMixin", "PlayerTickMixin", "PlayerUseItemMixin", "BlockBreakMixin", "PlayerDamageMixin", "SnowDropMixin", "PlayerDisconnectMixin"],
+  "mixins": ["MinecraftServerMixin", "PlayerTickMixin", "BlockBreakMixin", "PlayerDamageMixin", "BlockMixin", "PlayerDisconnectMixin", "BlockStrengthMixin", "MobSpawnMixin", "EntityLightningMixin"],
   "client": []
 }
 
