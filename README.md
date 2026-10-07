@@ -40,6 +40,5 @@ Other commands: `/spleef list`, `/spleef delete <name>`.
 
 - the lobby has to be in the same dimension as the arena, there's no support for cross dimension lobbies
 - each arena is one saved region with a 100k block cap
-- since this is server only and real players connect with an unmodified client, the client still shows its own mining animation speed for whatever block and tool you're using, even though the server breaks it instantly underneath. for anything other than a fast/correct tool it can look like a short delay client side before the block actually visually disappears, there's no way around that without a client mod
-
+- 
 Apache 2.0, see LICENSE.
